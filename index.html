@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<title>Il Mio Strava Wrapped 2025</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+  body{margin:0;background:#fc5200;color:#fff;font-family:system-ui;text-align:center;padding:40px;line-height:1.8}
+  h1{font-size:2.8em;margin:30px 0}
+  button{background:#fff;color:#fc5200;padding:15px 30px;border:none;border-radius:50px;font-size:1.2em;font-weight:bold;cursor:pointer;margin:20px}
+  .card{background:rgba(255,255,255,0.15);border-radius:20px;padding:30px;margin:20px auto;max-width:90%}
+  .error{background:#e31c1c;padding:20px;border-radius:15px;margin:20px}
+  .big{font-size:5em;font-weight:bold;margin:10px 0}
+</style>
+</head>
+<body>
+<h1>🏃‍♂️ Il Mio Strava Wrapped 2025</h1>
+
+<div id="content">
+  <div class="card">
+    <button onclick="loginStrava()">🔑 Connetti con Strava</button>
+    <p>Premi il pulsante per autorizzare l'accesso alle tue attività (anche private)</p>
+  </div>
+</div>
+
+<script>
+// CONFIGURAZIONE (cambia solo se crei una nuova app)
+const CLIENT_ID = "189218";
+const REDIRECT_URI = location.href.split('?')[0]; // funziona ovunque
+
+// Salva/carica token
+function saveToken(data) {
+  localStorage.setItem('strava_refresh', data.refresh_token);
+  localStorage.setItem('strava_access', data.access_token);
+  localStorage.setItem('expires_at', data.expires_at);
+}
+
+function getToken() {
+  return {
+    refresh: localStorage.getItem('strava_refresh'),
+    access: localStorage.getItem('strava_access'),
+    expires: localStorage.getItem('expires_at')
+  };
+}
+
+async function refreshAccessToken() {
+  const refresh = getToken().refresh;
+  if (!refresh) throw new Error("Nessun token salvato – devi prima autorizzare");
+
+  const resp = await fetch("https://www.strava.com/oauth/token", {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({
+      client_id: CLIENT_ID,
+      client_secret: "bc009f7ce923f271ce4254391ecddee128c77a71",
+      grant_type: "refresh_token",
+      refresh_token: refresh
+    })
+  });
+
+  if (!resp.ok) {
+    const err = await resp.json();
+    throw new Error("Token revocato o scaduto: " + (err.message || resp.status));
+  }
+
+  const data = await resp.json();
+  saveToken(data);
+  return data.access_token;
+}
+
+async function loadActivities() {
+  const content = document.getElementById("content");
+  content.innerHTML = "<div class='card'>Caricamento attività 2025...</div>";
+
+  try {
+    let access_token = getToken().access;
+    const expires = getToken().expires;
+
+    if (!access_token || (expires && Date.now()/1000 > expires - 300)) {
+      access_token = await refreshAccessToken();
+    }
+
+    const start = Math.floor(new Date("2025-01-01").getTime()/1000);
+    let activities = [];
+    let page = 1;
+
+    while (true) {
+      const resp = await fetch(`https://www.strava.com/api/v3/athlete/activities?after=\( {start}&per_page=200&page= \){page}`, {
+        headers: {Authorization: `Bearer ${access_token}`}
+      });
+
+      if (!resp.ok) {
+        const err = await resp.json();
+        throw new Error("Errore Strava: " + (err.message || resp.status));
+      }
+
+      const data = await resp.json();
+      if (!data || data.length === 0) break;
+      activities = activities.concat(data);
+      if (data.length < 200) break;
+      page++;
+    }
+
+    if (activities.length === 0) {
+      content.innerHTML = "<div class='card'><h2>😢 Nessuna attività nel 2025</h2><p>L'anno è appena iniziato!</p></div>";
+      return;
+    }
+
+    const km = (activities.reduce((s,a)=>s+a.distance,0)/1000).toFixed(1);
+    const secs = activities.reduce((s,a)=>s+a.moving_time,0);
+    const h = Math.floor(secs/3600);
+    const m = Math.floor((secs%3600)/60);
+    const elev = activities.reduce((s,a)=>s+(a.total_elevation_gain||0),0).toFixed(0);
+
+    content.innerHTML = `
+      <h1>Il tuo 2025</h1>
+      <div class="card"><div class="big">${activities.length}</div><small>attività</small></div>
+      <div class="card"><div class="big">${km}</div><small>km</small></div>
+      <div class="card"><div class="big">\( {h}h \){m}m</div><small>in movimento</small></div>
+      <div class="card"><div class="big">${elev}</div><small>m+</small></div>
+      <h1>🔥 LEGGENDARIO!</h1>
+      <button onclick="location.reload()">Aggiorna</button>`;
+  } catch (e) {
+    content.innerHTML = `<div class="error"><h2>Errore</h2><p>${e.message}</p><button onclick="location.reload()">Riprova</button></div>`;
+  }
+}
+
+function loginStrava() {
+  const url = `https://www.strava.com/oauth/authorize?client_id=\( {CLIENT_ID}&redirect_uri= \){encodeURIComponent(REDIRECT_URI)}&response_type=code&scope=activity:read_all&approval_prompt=force`;
+  location.href = url;
+}
+
+// Controlla se siamo di ritorno dall'auth
+const urlParams = new URLSearchParams(location.search);
+const code = urlParams.get('code');
+if (code) {
+  // Scambia code per token
+  fetch("https://www.strava.com/oauth/token", {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({
+      client_id: CLIENT_ID,
+      client_secret: "bc009f7ce923f271ce4254391ecddee128c77a71",
+      code: code,
+      grant_type: "authorization_code"
+    })
+  })
+  .then(r => r.json())
+  .then(data => {
+    saveToken(data);
+    history.replaceState(null, null, location.pathname); // pulisce l'URL
+    loadActivities();
+  })
+  .catch(() => {
+    document.getElementById("content").innerHTML = "<div class='error'>Errore autorizzazione – riprova</div>";
+  });
+} else if (getToken().refresh) {
+  loadActivities();
+}
+</script>
+</body>
+</html>
