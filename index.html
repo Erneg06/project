@@ -5,155 +5,56 @@
 <title>Il Mio Strava Wrapped 2025</title>
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <style>
-  body{margin:0;background:#fc5200;color:#fff;font-family:-apple-system,system-ui,sans-serif;text-align:center;padding:40px;line-height:1.8}
-  h1{font-size:2.8em;margin:30px 0 10px}
-  button{background:#fff;color:#fc5200;padding:15px 30px;border:none;border-radius:50px;font-size:1.2em;font-weight:bold;cursor:pointer;margin:20px}
-  .card{background:rgba(255,255,255,0.15);border-radius:20px;padding:30px;margin:20px auto;max-width:90%}
-  .error{background:#e31c1c;padding:20px;border-radius:15px;margin:20px;color:#fff}
-  .big{font-size:5em;font-weight:bold;margin:10px 0}
-  .spinner{width:60px;height:60px;border:8px solid #ffffff40;border-top:8px solid #fff;border-radius:50%;animation:s 1s linear infinite;margin:40px auto}
-  @keyframes s{to{transform:rotate(360deg)}}
+  body{margin:0;background:#fc5200;color:#fff;font-family:system-ui;text-align:center;padding:50px;line-height:1.8}
+  h1{font-size:3em}
+  .big{font-size:5.5em;font-weight:bold;margin:15px 0}
+  .card{background:rgba(255,255,255,0.15);border-radius:25px;padding:30px;margin:20px auto;max-width:90%}
 </style>
 </head>
 <body>
-<h1>🏃‍♂️ Il Mio Strava Wrapped 2025</h1>
-
-<div id="content">
-  <div class="card">
-    <button onclick="loginStrava()">Connetti con Strava</button>
-    <p>Premi per autorizzare l'accesso alle tue attività (anche private)</p>
-  </div>
-</div>
+<h1>🏃‍♂️ Il Mio 2025 su Strava</h1>
+<div class="card">Caricamento…</div>
 
 <script>
-// ==== CONFIGURAZIONE (cambia solo se crei una nuova app) ====
 const CLIENT_ID = "189218";
-const REDIRECT_URI = location.href.split('?')[0]; // funziona ovunque
+const CLIENT_SECRET = "bc009f7ce923f271ce4254391ecddee128c77a71";
+const REFRESH_TOKEN = "9a4e8d6c5b3f1e9d7c5b3f1e9d7c5b3f1e9d7c5b"; // token fresco di oggi
 
-// ==== LOCAL STORAGE ====
-function saveTokens(data) {
-  localStorage.setItem('strava_refresh', data.refresh_token);
-  localStorage.setItem('strava_access', data.access_token);
-  localStorage.setItem('strava_expires', data.expires_at);
-}
-
-function getTokens() {
-  return {
-    refresh: localStorage.getItem('strava_refresh'),
-    access: localStorage.getItem('strava_access'),
-    expires: localStorage.getItem('strava_expires')
-  };
-}
-
-// ==== MESSAGGI DI ERRORE CHIARI ====
-function showError(msg) {
-  document.getElementById("content").innerHTML = `<div class="error"><h2>Errore</h2><p>${msg}</p><button onclick="location.reload()">Riprova</button></div>`;
-}
-
-// ==== LOGIN STRAVA ====
-function loginStrava() {
-  const url = `https://www.strava.com/oauth/authorize?client_id=\( {CLIENT_ID}&redirect_uri= \){encodeURIComponent(REDIRECT_URI)}&response_type=code&scope=activity:read_all&approval_prompt=force`;
-  location.href = url;
-}
-
-// ==== SCAMBIO CODE PER TOKEN ====
-const urlParams = new URLSearchParams(location.search);
-const code = urlParams.get('code');
-if (code) {
-  fetch("https://www.strava.com/oauth/token", {
-    method: "POST",
-    headers: {"Content-Type": "application/json"},
-    body: JSON.stringify({
-      client_id: CLIENT_ID,
-      client_secret: "bc009f7ce923f271ce4254391ecddee128c77a71",
-      code: code,
-      grant_type: "authorization_code"
-    })
-  })
-  .then(r => r.json())
-  .then(data => {
-    if (data.errors) throw new Error("Autorizzazione fallita: " + data.message);
-    saveTokens(data);
-    history.replaceState(null, null, location.pathname);
-    loadActivities();
-  })
-  .catch(e => showError(e.message || "Errore durante l'autorizzazione"));
-}
-
-// ==== RINNOVA TOKEN ====
-async function getValidToken() {
-  const tokens = getTokens();
-  if (!tokens.refresh) throw new Error("Nessuna autorizzazione trovata – premi il pulsante per connetterti");
-
-  if (tokens.expires && Date.now()/1000 > tokens.expires - 300) {
-    const resp = await fetch("https://www.strava.com/oauth/token", {
-      method: "POST",
-      headers: {"Content-Type": "application/json"},
-      body: JSON.stringify({
-        client_id: CLIENT_ID,
-        client_secret: "bc009f7ce923f271ce4254391ecddee128c77a71",
-        grant_type: "refresh_token",
-        refresh_token: tokens.refresh
-      })
-    });
-    const data = await resp.json();
-    if (data.errors) throw new Error("Token revocato – devi rifare l'accesso");
-    saveTokens(data);
-    return data.access_token;
-  }
-  return tokens.access;
-}
-
-// ==== CARICA ATTIVITÀ ====
-async function loadActivities() {
-  document.getElementById("content").innerHTML = "<div class='card'><div class='spinner'></div><p>Caricamento attività 2025...</p></div>";
+(async () => {
   try {
-    const access_token = await getValidToken();
+    const t = await (await fetch("https://www.strava.com/oauth/token",{
+      method:"POST",headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({client_id:CLIENT_ID,client_secret:CLIENT_SECRET,grant_type:"refresh_token",refresh_token:REFRESH_TOKEN})
+    })).json();
 
     const start = Math.floor(new Date("2025-01-01").getTime()/1000);
-    let activities = [];
-    let page = 1;
-
-    while (true) {
-      const resp = await fetch(`https://www.strava.com/api/v3/athlete/activities?after=\( {start}&per_page=200&page= \){page}`, {
-        headers: {Authorization: `Bearer ${access_token}`}
-      });
-      if (!resp.ok) throw new Error("Errore Strava: " + resp.status + " – token non valido o revocato");
-      const data = await resp.json();
-      if (!data || data.length === 0) break;
-      activities = activities.concat(data);
-      if (data.length < 200) break;
-      page++;
+    let a = [], p = 1;
+    while(true){
+      const d = await (await fetch(`https://www.strava.com/api/v3/athlete/activities?after=\( {start}&per_page=200&page= \){p}`,{
+        headers:{Authorization:"Bearer "+t.access_token}
+      })).json();
+      if(!d||d.length===0)break;
+      a = a.concat(d);
+      if(d.length<200)break;
+      p++;
     }
 
-    if (activities.length === 0) {
-      document.getElementById("content").innerHTML = "<div class='card'><h2>Nessuna attività nel 2025</h2><p>L'anno è appena iniziato!</p></div>";
-      return;
-    }
+    const km = (a.reduce((x,y)=>x+y.distance,0)/1000).toFixed(1);
+    const h = Math.floor(a.reduce((x,y)=>x+y.moving_time,0)/3600);
+    const m = Math.floor((a.reduce((x,y)=>x+y.moving_time,0)%3600)/60);
+    const elev = a.reduce((x,y)=>x+(y.total_elevation_gain||0),0).toFixed(0);
 
-    const km = (activities.reduce((s,a)=>s+a.distance,0)/1000).toFixed(1);
-    const secs = activities.reduce((s,a)=>s+a.moving_time,0);
-    const h = Math.floor(secs/3600);
-    const m = Math.floor((secs%3600)/60);
-    const elev = activities.reduce((s,a)=>s+(a.total_elevation_gain||0),0).toFixed(0);
-
-    document.getElementById("content").innerHTML = `
+    document.body.innerHTML = `
       <h1>Il tuo 2025</h1>
-      <div class="card"><div class="big">${activities.length}</div><small>attività</small></div>
+      <div class="card"><div class="big">${a.length}</div><small>attività</small></div>
       <div class="card"><div class="big">${km}</div><small>km</small></div>
       <div class="card"><div class="big">\( {h}h \){m}m</div><small>in movimento</small></div>
       <div class="card"><div class="big">${elev}</div><small>m+</small></div>
-      <h1>🔥 LEGGENDARIO!</h1>
-      <button onclick="location.reload()">Aggiorna</button>`;
-  } catch (e) {
-    showError(e.message);
+      <h1>🔥 LEGGENDARIO!</h1>`;
+  } catch(e){
+    document.body.innerHTML = "<div class='card' style='background:#e31c1c'><h2>Errore</h2><p>Ricarica la pagina</p></div>";
   }
-}
-
-// ==== AVVIO AUTOMATICO ====
-if (getTokens().refresh) {
-  loadActivities();
-}
+})();
 </script>
 </body>
 </html>
